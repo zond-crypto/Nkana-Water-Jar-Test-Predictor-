@@ -348,6 +348,66 @@ def import_historical_workbook(uploaded):
     return inserted, created_experiments
 
 
+
+def import_bundled_historical_dataset():
+    """Idempotently load the committed, source-faithful NWSC dataset into Supabase."""
+    path = "data/historical_jar_tests.csv"
+    frame = pd.read_csv(path, dtype={"experiment_code": str, "date_cell_original": str})
+    required = {"experiment_code","date_iso_parsed","raw_turbidity_ntu","dose_mg_l","source_excel_row"}
+    if not required.issubset(frame.columns):
+        raise ValueError("Bundled historical dataset is missing required columns.")
+    db = get_db()
+    inserted = 0
+    created = 0
+    for code, group in frame.groupby("experiment_code", sort=False):
+        first = group.iloc[0]
+        exists = db.table("experiments").select("id").eq("experiment_code", str(code)).limit(1).execute().data or []
+        if exists:
+            exp_id = exists[0]["id"]
+        else:
+            date_value = str(first["date_iso_parsed"]) if pd.notna(first["date_iso_parsed"]) and str(first["date_iso_parsed"]).strip() else datetime.now(timezone.utc).date().isoformat()
+            raw_ph = first.get("raw_ph")
+            raw_ph = float(raw_ph) if pd.notna(raw_ph) else None
+            date_original = str(first.get("date_cell_original", ""))
+            notes = (f"Imported from committed historical dataset derived from JAR TEST EXPERIMENT (1).xlsx. "
+                     f"Original worksheet: {code}. Original date cell: {date_original}. "
+                     "Worksheet title/date discrepancies are intentionally preserved; '*' values are missing, not zero.")
+            rec = db.table("experiments").insert({
+                "experiment_code": str(code), "experiment_date": date_value,
+                "source_location": "Historical NWSC jar-test workbook",
+                "water_source": "Raw water",
+                "raw_turbidity_ntu": float(first["raw_turbidity_ntu"]),
+                "raw_ph": raw_ph, "coagulant_name": "Aluminium sulphate",
+                "notes": notes
+            }).execute().data
+            exp_id = rec[0]["id"]
+            created += 1
+
+        existing_rows = db.table("jar_test_results").select("observation_notes").eq("experiment_id", exp_id).execute().data or []
+        existing_markers = {row.get("observation_notes") for row in existing_rows}
+        pending = []
+        for _, row in group.iterrows():
+            excel_row = int(row["source_excel_row"])
+            marker = f"source_sheet={code}; source_excel_row={excel_row}; source_file=JAR TEST EXPERIMENT"
+            if marker in existing_markers:
+                continue
+            def optional_float(value):
+                return float(value) if pd.notna(value) and str(value).strip() != "" else None
+            pending.append({
+                "experiment_id": exp_id,
+                "dose_mg_l": float(row["dose_mg_l"]),
+                "treated_turbidity_ntu": optional_float(row["treated_turbidity_ntu"]),
+                "treated_ph": optional_float(row["treated_ph"]),
+                "result_origin": "imported",
+                "observation_notes": marker
+            })
+            existing_markers.add(marker)
+        if pending:
+            db.table("jar_test_results").insert(pending).execute()
+            inserted += len(pending)
+    return inserted, created
+
+
 def make_synthetic(curves, count, seed=17):
     rng=np.random.default_rng(seed)
     out=[]
@@ -369,8 +429,18 @@ st.sidebar.caption("Only real/imported measurements train the dose model. Synthe
 
 with st.sidebar:
     st.divider()
-    st.subheader("Import historical jar tests")
-    workbook=st.file_uploader("Upload original NWSC workbook (.xlsx)",type=["xlsx"],key="history_import")
+    st.subheader("Historical NWSC dataset")
+    st.caption("The original uploaded workbook has been transcribed into a version-controlled dataset in this repository.")
+    if st.button("Load committed historical data into Supabase",disabled=not ready,type="primary"):
+        try:
+            n, created = import_bundled_historical_dataset()
+            st.success(f"Loaded {n} jar rows across {created} new experiments. Re-running is safe; source rows are de-duplicated.")
+            st.rerun()
+        except Exception as exc:
+            st.error(f"Historical data load failed: {exc}")
+    st.divider()
+    st.subheader("Import another historical workbook")
+    workbook=st.file_uploader("Upload additional NWSC workbook (.xlsx)",type=["xlsx"],key="history_import")
     if workbook and st.button("Import to permanent database",disabled=not ready,type="primary"):
         try:
             n, created = import_historical_workbook(workbook)
