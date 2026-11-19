@@ -383,25 +383,34 @@ def import_bundled_historical_dataset():
             exp_id = rec[0]["id"]
             created += 1
 
-        existing_rows = db.table("jar_test_results").select("observation_notes").eq("experiment_id", exp_id).execute().data or []
+        existing_rows = db.table("jar_test_results").select("dose_mg_l,observation_notes").eq("experiment_id", exp_id).execute().data or []
         existing_markers = {row.get("observation_notes") for row in existing_rows}
+        existing_doses = {round(float(row["dose_mg_l"]), 6) for row in existing_rows}
+        # The database intentionally enforces one row per experiment/dose. The
+        # source workbook sometimes repeats the selected dose on a summary row.
+        # Prefer a row with a numeric treated-turbidity result over a blank repeat.
+        group = group.assign(_has_result=group["treated_turbidity_ntu"].notna()).sort_values(
+            "_has_result", ascending=False
+        ).drop_duplicates(subset=["dose_mg_l"], keep="first")
         pending = []
         for _, row in group.iterrows():
             excel_row = int(row["source_excel_row"])
             marker = f"source_sheet={code}; source_excel_row={excel_row}; source_file=JAR TEST EXPERIMENT"
-            if marker in existing_markers:
+            dose_value = float(row["dose_mg_l"])
+            if marker in existing_markers or round(dose_value, 6) in existing_doses:
                 continue
             def optional_float(value):
                 return float(value) if pd.notna(value) and str(value).strip() != "" else None
             pending.append({
                 "experiment_id": exp_id,
-                "dose_mg_l": float(row["dose_mg_l"]),
+                "dose_mg_l": dose_value,
                 "treated_turbidity_ntu": optional_float(row["treated_turbidity_ntu"]),
                 "treated_ph": optional_float(row["treated_ph"]),
                 "result_origin": "imported",
                 "observation_notes": marker
             })
             existing_markers.add(marker)
+            existing_doses.add(round(dose_value, 6))
         if pending:
             db.table("jar_test_results").insert(pending).execute()
             inserted += len(pending)
