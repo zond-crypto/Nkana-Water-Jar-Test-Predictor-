@@ -30,10 +30,10 @@ def test_synthetic_rows_are_excluded():
 
 def test_chemical_plan_mass_balance():
     plan = chemical_plan(30, 62940, 50, 24, 8, 10)
-    assert plan["kg_day"] == 1888.2
-    assert plan["bags_day"] == 37.764
-    assert plan["kg_shift"] == 629.4
-    assert plan["solution_feed_l_h"] == 7867.5
+    assert np.isclose(plan["kg_day"], 1888.2)
+    assert np.isclose(plan["bags_day"], 37.764)
+    assert np.isclose(plan["kg_shift"], 629.4)
+    assert np.isclose(plan["solution_feed_l_h"], 7867.5)
 
 
 def test_optimizer_blocks_extrapolation():
