@@ -13,20 +13,35 @@ st.set_page_config(page_title="Nkana Water | Treatment Intelligence",page_icon="
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap');
-:root{--ink:#142d40;--muted:#627789;--teal:#087f8c;--blue:#16425f;--line:#dce6ec}
-html,body,[class*="css"]{font-family:'DM Sans',sans-serif}.stApp{background:#f4f7f9;color:var(--ink)}
+:root{color-scheme:dark;--ink:#e7eef7;--muted:#a7b6c8;--teal:#38c6c0;--blue:#8bd5e1;--line:#34465b;--panel:#172638;--surface:#101b2a}
+html,body,[class*="css"]{font-family:'DM Sans',sans-serif;color:var(--ink)}
+.stApp{background:#0b1420;color:var(--ink)}
+[data-testid="stAppViewContainer"],[data-testid="stHeader"]{background:#0b1420;color:var(--ink)}
 .block-container{max-width:1450px;padding-top:1.1rem;padding-bottom:3rem}
-h1,h2,h3{font-family:'Manrope',sans-serif;letter-spacing:-.025em;color:var(--ink)}
-[data-testid="stSidebar"]{background:linear-gradient(180deg,#102f43,#14536a)}[data-testid="stSidebar"] *{color:#eff9fb!important}
-[data-testid="stMetric"]{background:white;border:1px solid var(--line);padding:1rem;border-radius:14px;box-shadow:0 4px 16px #142d4009}
-[data-testid="stMetricValue"]{font-family:'Manrope',sans-serif;color:var(--blue);font-weight:800}
-.stTabs [data-baseweb="tab"]{font-weight:700;padding:0 .9rem}.stTabs [aria-selected="true"]{color:var(--teal)!important;border-bottom:3px solid var(--teal)}
-.stButton>button,.stDownloadButton>button{border-radius:9px;min-height:2.6rem;font-weight:700}
-.stButton>button[kind="primary"]{background:var(--teal);border-color:var(--teal)}
-.nw-hero{padding:1.55rem 1.7rem;border-radius:18px;color:white;background:linear-gradient(115deg,#102f43,#14536a 60%,#087f8c);margin-bottom:1.25rem}
+h1,h2,h3,h4,p,li,label,.stMarkdown,.stCaption{font-family:'DM Sans',sans-serif;color:var(--ink)}
+h1,h2,h3{font-family:'Manrope',sans-serif;letter-spacing:-.025em}
+small,[data-testid="stCaptionContainer"]{color:#b5c3d2!important}
+[data-testid="stSidebar"]{background:linear-gradient(180deg,#101f31,#123c50)}
+[data-testid="stSidebar"] *{color:#edf7fb!important}
+[data-testid="stMetric"]{background:#172638;border:1px solid #34465b;padding:1rem;border-radius:14px;box-shadow:0 4px 18px #0005}
+[data-testid="stMetricLabel"],[data-testid="stMetricDelta"]{color:#c2d0df!important}
+[data-testid="stMetricValue"]{font-family:'Manrope',sans-serif;color:#8fe0e2!important;font-weight:800}
+.stTabs [data-baseweb="tab"]{font-weight:700;padding:0 .9rem;color:#c4d1df}
+.stTabs [aria-selected="true"]{color:#63d8d0!important;border-bottom:3px solid #38c6c0}
+.stButton>button,.stDownloadButton>button{border-radius:9px;min-height:2.6rem;font-weight:700;background:#20364b;color:#f2f7fb;border:1px solid #496078}
+.stButton>button:hover,.stDownloadButton>button:hover{border-color:#55d1c8;color:#fff}
+.stButton>button[kind="primary"]{background:#087f83;border-color:#38c6c0;color:white}
+input,textarea,[data-baseweb="input"],[data-baseweb="select"],[data-baseweb="textarea"]{background:#142337!important;color:#f2f7fb!important;border-color:#52677d!important}
+input,textarea{color:#f2f7fb!important}
+[data-baseweb="popover"],[data-baseweb="menu"],[role="listbox"]{background:#172638!important;color:#f2f7fb!important}
+[data-baseweb="option"],[role="option"]{color:#edf4fb!important}
+[data-testid="stDataFrame"],[data-testid="stTable"]{background:#142337;color:#edf4fb}
+[data-testid="stAlert"]{background:#172638;color:#edf4fb;border:1px solid #40556b}
+hr{border-color:#34465b!important}
+.nw-hero{padding:1.55rem 1.7rem;border-radius:18px;color:white;background:linear-gradient(115deg,#101f31,#16445a 60%,#087f83);margin-bottom:1.25rem;border:1px solid #31556b}
 .nw-kicker{font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;color:#bde8eb;font-weight:700}
 .nw-title{font:800 clamp(1.6rem,3vw,2.4rem)/1.15 Manrope,sans-serif;color:white;margin:.4rem 0}
-.nw-sub{color:#d8ebee;max-width:850px;margin:0}.nw-chip{display:inline-block;margin:.8rem .35rem 0 0;padding:.28rem .65rem;border:1px solid #ffffff40;border-radius:99px;color:#f2fbfc;font-size:.75rem}
+.nw-sub{color:#d8ebee;max-width:850px;margin:0}.nw-chip{display:inline-block;margin:.8rem .35rem 0 0;padding:.28rem .65rem;border:1px solid #ffffff55;border-radius:99px;color:#f2fbfc;font-size:.75rem}
 @media(max-width:700px){.block-container{padding-left:.8rem;padding-right:.8rem}.nw-hero{padding:1.15rem;border-radius:14px}}
 </style>
 <div class="nw-hero"><div class="nw-kicker">Nkana Water Supply and Sanitation Company · Central Laboratory</div>
@@ -159,7 +174,12 @@ with tabs[0]:
         a.metric("Theoretical alum",f"{plan['kg_day']:,.1f} kg/day")
         b.metric("Bag requirement",f"{plan['bags_day']:,.2f} bags/day")
         c.metric("Shift requirement",f"{plan['kg_shift']:,.1f} kg/shift")
-        st.caption(f"Whole-bag planning: {plan['whole_bags_day']} bags/day. Shift quantity: {plan['bags_shift']:.2f} bags ({math.ceil(plan['bags_shift'])} whole bags).")
+        d,e=st.columns(2)
+        d.metric("Alum bags per shift",f"{plan['bags_shift']:.2f} bags",
+                 help="Theoretical bag-equivalent consumption for the selected shift length.")
+        e.metric("Whole bags to stage per shift",f"{math.ceil(plan['bags_shift']):,} bags",
+                 help="Rounded up to ensure sufficient stock is available for the shift.")
+        st.caption(f"Daily planning: {plan['bags_day']:.2f} bag-equivalents/day; stage {plan['whole_bags_day']} whole bags/day. Shift calculation uses the selected operating hours/day and shift length.")
         if stock>0:
             st.metric("Calculated stock-solution feed",f"{plan['solution_feed_l_h']:,.1f} L/hour")
         st.warning("Dose is expressed as mg/L of the same aluminium-sulphate product basis used in the historical jar tests. Verify stock preparation, pump calibration and product specification before translating this to plant feed.")
@@ -173,7 +193,7 @@ with tabs[0]:
     if not train.empty:
         fig=go.Figure()
         fig.add_scatter(x=train.raw,y=train.dose,mode="markers+text",text=train.experiment_id,textposition="top center",name="Experiment target dose")
-        fig.update_layout(xaxis_title="Raw turbidity (NTU)",yaxis_title=f"Alum dose to reach ≤ {target:g} NTU (mg/L)",height=390)
+        fig.update_layout(template="plotly_dark",paper_bgcolor="#0b1420",plot_bgcolor="#101b2a",font_color="#e7eef7",xaxis_title="Raw turbidity (NTU)",yaxis_title=f"Alum dose to reach ≤ {target:g} NTU (mg/L)",height=390)
         st.plotly_chart(fig,use_container_width=True)
         st.caption("Each dot represents one independent experiment after monotone dose-response smoothing. The historical source contains date-label inconsistencies, so v4 deliberately uses all eligible experiments rather than filtering by year. Inspect unusual experiments before relying on the model.")
     st.info("pH, alkalinity and temperature are deliberately not used as prediction features yet: their historical coverage is too incomplete for a fair validation. We will add them only when enough comparable, verified measurements have accumulated.")
@@ -199,7 +219,7 @@ with tabs[1]:
         grid=np.geomspace(max(.1,min(x["dose_min"] for x in curves)),max(x["dose_max"] for x in curves),80)
         fig=go.Figure()
         for q in curves:fig.add_scatter(x=grid,y=[q["floor"]+(q["raw"]-q["floor"])/(1+(v/q["d50"])**q["hill"]) for v in grid],mode="lines",name=q["experiment_id"])
-        fig.update_layout(xaxis_title="Alum dose (mg/L)",yaxis_title="Modelled settled turbidity (NTU)",height=420)
+        fig.update_layout(template="plotly_dark",paper_bgcolor="#0b1420",plot_bgcolor="#101b2a",font_color="#e7eef7",xaxis_title="Alum dose (mg/L)",yaxis_title="Modelled settled turbidity (NTU)",height=420)
         st.plotly_chart(fig,use_container_width=True)
 
 with tabs[2]:
