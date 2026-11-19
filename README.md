@@ -24,4 +24,4 @@ In the app sidebar, upload `Nkana_Water_Intelligent_Jar_Test_Workbook.xlsx`. The
 
 
 ## Version 3.0
-See [README_V3.md](README_V3.md) for the new model architecture, validation approach, deployment setting and governance controls. The v3 entry point is `app_v3.py`; the previous `app.py` remains available as a rollback reference.
+See [README_V3.md](README_V3.md) for the new model architecture, validation approach, deployment setting and governance controls. The v4 entry point is `app_v4.py`; see [README_V4.md](README_V4.md) for the optimisation and validation method. The previous `app_v3.py` remains available as a rollback reference.
