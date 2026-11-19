@@ -199,6 +199,104 @@ def fit_hill(group):
 def hill_curve(raw,dose,floor,d50,h):
     return floor+(raw-floor)/(1+(dose/d50)**h)
 
+def import_historical_workbook(uploaded):
+    book = pd.ExcelFile(uploaded)
+    candidates = []
+    required = {
+        "raw": ["Raw Turbidity (NTU)", "Raw Turbidity", "Raw NTU"],
+        "dose": ["Alum Dose (mg/L)", "Alum Dose", "Dose (mg/L)", "Dose"],
+        "treated": ["Treated Turbidity (NTU)", "Treated Turbidity", "Settled Turbidity (NTU)"]
+    }
+    for sheet in book.sheet_names:
+        try:
+            frame = pd.read_excel(uploaded, sheet_name=sheet)
+        except Exception:
+            continue
+        # Also support the workbook's normalized Jar Test Data sheet, whose headers may start below title rows.
+        for header_row in [0, 1, 2, 3, 4, 5]:
+            try:
+                trial = pd.read_excel(uploaded, sheet_name=sheet, header=header_row)
+            except Exception:
+                continue
+            norm = {str(c).strip().lower(): c for c in trial.columns}
+            def find(options):
+                for option in options:
+                    if option.lower() in norm:
+                        return norm[option.lower()]
+                return None
+            raw_col, dose_col, treated_col = find(required["raw"]), find(required["dose"]), find(required["treated"])
+            if raw_col and dose_col and treated_col:
+                candidates.append((sheet, trial, raw_col, dose_col, treated_col))
+                break
+    if not candidates:
+        raise ValueError("Could not identify columns for raw turbidity, alum dose and treated/settled turbidity. Use the normalized Jar Test Data sheet or the original workbook format.")
+    db=get_db()
+    inserted=0
+    for sheet, frame, raw_col, dose_col, treated_col in candidates:
+        norm={str(c).strip().lower():c for c in frame.columns}
+        def col(*names):
+            for n in names:
+                if n.lower() in norm: return norm[n.lower()]
+            return None
+        id_col=col("Experiment ID","Experiment","Test ID")
+        date_col=col("Date","Experiment Date","Test Date")
+        ph_col=col("Raw pH","Raw-water pH","Raw Water pH")
+        tph_col=col("Treated pH","Settled pH")
+        source_col=col("Source Sheet","Source","Location","Source / Location")
+        valid=frame.dropna(subset=[raw_col,dose_col,treated_col]).copy()
+        if valid.empty: continue
+        if id_col:
+            valid["_exp_code"]=valid[id_col].astype(str).str.strip()
+        else:
+            valid["_exp_code"]=sheet
+        for code, group in valid.groupby("_exp_code"):
+            if not code or code.lower()=="nan": code=sheet
+            raw_vals=pd.to_numeric(group[raw_col],errors="coerce").dropna()
+            if raw_vals.empty: continue
+            raw=float(raw_vals.iloc[0])
+            ph=None
+            if ph_col:
+                p=pd.to_numeric(group[ph_col],errors="coerce").dropna()
+                if not p.empty: ph=float(p.iloc[0])
+            date_value=None
+            if date_col:
+                dates=pd.to_datetime(group[date_col],errors="coerce").dropna()
+                if not dates.empty: date_value=dates.iloc[0].date().isoformat()
+            if not date_value: date_value=datetime.now(timezone.utc).date().isoformat()
+            source=str(group[source_col].iloc[0]) if source_col else sheet
+            existing=db.table("experiments").select("id").eq("experiment_code",str(code)).limit(1).execute().data or []
+            if existing:
+                exp_id=existing[0]["id"]
+            else:
+                rec=db.table("experiments").insert({
+                    "experiment_code":str(code),"experiment_date":date_value,
+                    "source_location":source,"water_source":source,
+                    "raw_turbidity_ntu":raw,"raw_ph":ph,
+                    "coagulant_name":"Aluminium sulphate"
+                }).execute().data
+                exp_id=rec[0]["id"]
+            old=db.table("jar_test_results").select("dose_mg_l").eq("experiment_id",exp_id).execute().data or []
+            old_doses={round(float(x["dose_mg_l"]),6) for x in old}
+            rows=[]
+            for _,row in group.iterrows():
+                dose_value=pd.to_numeric(pd.Series([row[dose_col]]),errors="coerce").iloc[0]
+                turb_value=pd.to_numeric(pd.Series([row[treated_col]]),errors="coerce").iloc[0]
+                if pd.isna(dose_value) or pd.isna(turb_value): continue
+                dose_value=float(dose_value)
+                if round(dose_value,6) in old_doses: continue
+                treated_ph=None
+                if tph_col:
+                    v=pd.to_numeric(pd.Series([row[tph_col]]),errors="coerce").iloc[0]
+                    if not pd.isna(v): treated_ph=float(v)
+                rows.append({"experiment_id":exp_id,"dose_mg_l":dose_value,
+                             "treated_turbidity_ntu":float(turb_value),
+                             "treated_ph":treated_ph,"result_origin":"imported"})
+                old_doses.add(round(dose_value,6))
+            if rows:
+                db.table("jar_test_results").insert(rows).execute()
+                inserted += len(rows)
+    return inserted
+
 def make_synthetic(curves, count, seed=17):
     rng=np.random.default_rng(seed)
     out=[]
@@ -217,6 +315,18 @@ ready=db_status()
 st.sidebar.markdown("**Storage:** Supabase PostgreSQL")
 if ready: st.sidebar.success("Database connection configured")
 st.sidebar.caption("Only real/imported measurements train the dose model. Synthetic records are never stored as measured results.")
+
+with st.sidebar:
+    st.divider()
+    st.subheader("Import historical jar tests")
+    workbook=st.file_uploader("Upload original NWSC workbook (.xlsx)",type=["xlsx"],key="history_import")
+    if workbook and st.button("Import to permanent database",disabled=not ready,type="primary"):
+        try:
+            n=import_historical_workbook(workbook)
+            st.success(f"Imported {n} new dose observations. Existing experiment/dose pairs were skipped.")
+            st.rerun()
+        except Exception as exc:
+            st.error(f"Import failed: {exc}")
 
 try:
     data=load_data() if ready else pd.DataFrame()
