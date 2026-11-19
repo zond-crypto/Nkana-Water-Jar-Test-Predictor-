@@ -50,25 +50,45 @@ hr{border-color:#34465b!important}
 <span class="nw-chip">REAL DATA FIRST</span><span class="nw-chip">EXPLAINABLE MODELS</span><span class="nw-chip">AUDITABLE HISTORY</span></div>
 """,unsafe_allow_html=True)
 
-# Credentials must be stored in Streamlit Cloud Secrets, never in GitHub.
-password=st.secrets.get("APP_PASSWORD","");url=st.secrets.get("SUPABASE_URL","");key=st.secrets.get("SUPABASE_SERVICE_ROLE_KEY","")
-if not password or not url or not key:
-    st.error("Configuration incomplete. Add APP_PASSWORD, SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY to Streamlit Cloud → App settings → Secrets.");st.stop()
-if not st.session_state.get("authenticated"):
-    with st.form("login"):
-        st.subheader("Laboratory access");entered=st.text_input("Application password",type="password")
-        if st.form_submit_button("Sign in",type="primary"):
-            if hmac.compare_digest(entered,password):st.session_state.authenticated=True;st.rerun()
-            st.error("Incorrect password.")
+# Keep credentials in Streamlit Cloud → App settings → Secrets. Never commit them.
+try:
+    password = str(st.secrets.get("APP_PASSWORD", "")).strip()
+    url = str(st.secrets.get("SUPABASE_URL", "")).strip()
+    key = str(st.secrets.get("SUPABASE_SERVICE_ROLE_KEY", "")).strip()
+except Exception:
+    password = url = key = ""
+
+if not password:
+    st.error("Application sign-in is not configured. The administrator must add APP_PASSWORD in Streamlit Cloud → App settings → Secrets.")
     st.stop()
+
+if not st.session_state.get("authenticated", False):
+    st.subheader("Laboratory access")
+    with st.form("login", clear_on_submit=True):
+        entered = st.text_input("Application password", type="password", autocomplete="current-password")
+        submitted = st.form_submit_button("Sign in", type="primary", use_container_width=True)
+    if submitted:
+        if hmac.compare_digest(entered.strip(), password):
+            st.session_state["authenticated"] = True
+            st.rerun()
+        else:
+            st.error("Password not accepted. Check the application password with the administrator; it is not your GitHub or Streamlit account password.")
+    st.stop()
+
+if not url or not key:
+    st.error("Database connection is not configured. The administrator must add SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in Streamlit Cloud → App settings → Secrets.")
+    st.stop()
+
 @st.cache_resource
-def db():return create_client(url,key)
+def db():
+    return create_client(url, key)
 with st.sidebar:
     st.markdown("### NKANA WATER");st.caption("CENTRAL LABORATORY · INTERNAL DECISION SUPPORT")
     st.success("Database connection configured")
     if st.button("Sign out"):st.session_state.authenticated=False;st.rerun()
     st.divider();st.caption("Only measured/imported observations train models. Synthetic scenarios are never stored as measured results.")
 
+@st.cache_data(ttl=60, show_spinner=False)
 def load():
     ex=db().table("experiments").select("id,experiment_code,experiment_date,source_location,water_source,raw_turbidity_ntu,raw_ph,raw_temperature_c,raw_alkalinity_mg_l_caco3,plant_flow_m3_day,operating_hours_per_day,shift_length_hours,alum_bag_mass_kg,notes").order("experiment_date",desc=True).execute().data or []
     jars=db().table("jar_test_results").select("id,experiment_id,dose_mg_l,treated_turbidity_ntu,treated_ph,residual_aluminium_mg_l,settling_time_min,observation_notes,result_origin,created_at").execute().data or []
@@ -83,6 +103,7 @@ def load():
       "treated_ph":d["treated_ph"],"residual_aluminium_mg_l":d["residual_aluminium_mg_l"],
       "settling_time_min":d["settling_time_min"],"observation_notes":d["observation_notes"],"origin":d["result_origin"],"notes":d["notes"]})
 
+@st.cache_data(ttl=86400, show_spinner=False)
 def sync_committed_history():
     """Idempotently seed the committed source transcription into the durable database."""
     frame=pd.read_csv("data/historical_jar_tests.csv",dtype={"experiment_code":str,"date_cell_original":str})
@@ -130,9 +151,16 @@ nexp=int(data.experiment_id.dropna().astype(str).nunique()) if not data.empty el
 m1,m2,m3,m4=st.columns(4)
 m1.metric("Jar observations",f"{len(data):,}");m2.metric("Experiments",f"{nexp:,}")
 m3.metric("Measured / imported",f"{len(real):,}")
+@st.cache_data(ttl=30, show_spinner=False)
+def load_predictions():
+    return db().table("predictions").select("*").order("created_at",desc=True).limit(500).execute().data or []
+
 preds=[]
-try:preds=db().table("predictions").select("*").order("created_at",desc=True).limit(500).execute().data or []
-except Exception:pass
+try:
+    preds=load_predictions()
+except Exception as exc:
+    st.warning("Saved recommendations could not be loaded. Other laboratory functions remain available.")
+    st.caption(f"Database read: {type(exc).__name__}")
 m4.metric("Predictions awaiting validation",f"{sum(p.get('actual_turbidity_ntu') is None for p in preds):,}")
 tabs=st.tabs(["Dose optimiser","Treated-water predictor","Record experiment","History & learning","Quality & governance"])
 
@@ -189,6 +217,7 @@ with tabs[0]:
               "plant_flow_m3_day":flow,"alum_bag_mass_kg":bag,"model_name":result["method"],"model_version":"NWSC-ATI-4.0",
               "input_within_training_range":True,"confidence_level":result["confidence"],
               "prediction_notes":f"target={target}; experiments={result['n_experiments']}; validation={val}"}).execute()
+            load_predictions.clear()
             st.success("Dose recommendation saved for outcome validation.")
     if not train.empty:
         fig=go.Figure()
@@ -257,6 +286,7 @@ with tabs[2]:
             expid=created[0]["id"]
             db().table("jar_test_results").insert([{"experiment_id":expid,"dose_mg_l":dv,"treated_turbidity_ntu":tv,
               "treated_ph":tp,"result_origin":"measured"} for dv,tv,tp in parsed]).execute()
+            load.clear()
             st.success(f"Saved {expcode} with {len(parsed)} jar readings.");st.rerun()
         except Exception as exc:st.error(f"Could not save experiment: {exc}")
 
@@ -282,6 +312,7 @@ with tabs[3]:
                 record=st.form_submit_button("Record actual result")
             if record:
                 db().table("predictions").update({"actual_turbidity_ntu":actual}).eq("id",opts[label]["id"]).execute()
+                load_predictions.clear()
                 st.success("Outcome saved.");st.rerun()
     else:st.caption("No saved recommendations yet.")
     verified=[q for q in preds if q.get("actual_turbidity_ntu") is not None and q.get("predicted_turbidity_ntu") is not None]
