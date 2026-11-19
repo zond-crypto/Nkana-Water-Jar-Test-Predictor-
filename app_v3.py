@@ -67,6 +67,45 @@ def load():
       "treated_ph":d["treated_ph"],"residual_aluminium_mg_l":d["residual_aluminium_mg_l"],
       "settling_time_min":d["settling_time_min"],"observation_notes":d["observation_notes"],"origin":d["result_origin"],"notes":d["notes"]})
 
+def sync_committed_history():
+    """Idempotently seed the committed source transcription into the durable database."""
+    frame=pd.read_csv("data/historical_jar_tests.csv",dtype={"experiment_code":str,"date_cell_original":str})
+    required={"experiment_code","date_iso_parsed","raw_turbidity_ntu","dose_mg_l","source_excel_row"}
+    if not required.issubset(frame.columns):raise ValueError("Historical baseline CSV has unexpected columns.")
+    for code,g in frame.groupby("experiment_code",sort=False):
+        first=g.iloc[0]
+        found=db().table("experiments").select("id").eq("experiment_code",str(code)).limit(1).execute().data or []
+        if found:expid=found[0]["id"]
+        else:
+            datev=str(first["date_iso_parsed"]) if pd.notna(first["date_iso_parsed"]) else datetime.now(timezone.utc).date().isoformat()
+            phv=float(first["raw_ph"]) if pd.notna(first.get("raw_ph")) else None
+            note=("Imported from source transcription of JAR TEST EXPERIMENT workbook. "
+                  f"Original sheet={code}; original date cell={first.get('date_cell_original','')}. "
+                  "Source date discrepancies are preserved; blank/'*' results remain missing.")
+            created=db().table("experiments").insert({"experiment_code":str(code),"experiment_date":datev,
+              "source_location":"Historical NWSC jar-test workbook","water_source":"Raw water",
+              "raw_turbidity_ntu":float(first["raw_turbidity_ntu"]),"raw_ph":phv,
+              "coagulant_name":"Aluminium sulphate","notes":note}).execute().data
+            expid=created[0]["id"]
+        old=db().table("jar_test_results").select("dose_mg_l").eq("experiment_id",expid).execute().data or []
+        doses={round(float(x["dose_mg_l"]),6) for x in old}
+        g=g.assign(_has=g["treated_turbidity_ntu"].notna()).sort_values("_has",ascending=False).drop_duplicates("dose_mg_l")
+        pending=[]
+        for _,row in g.iterrows():
+            dosev=float(row["dose_mg_l"])
+            if round(dosev,6) in doses:continue
+            def opt(v):return float(v) if pd.notna(v) else None
+            pending.append({"experiment_id":expid,"dose_mg_l":dosev,
+              "treated_turbidity_ntu":opt(row["treated_turbidity_ntu"]),"treated_ph":opt(row.get("treated_ph")),
+              "result_origin":"imported","observation_notes":f"source_sheet={code}; source_excel_row={int(row['source_excel_row'])}; baseline=v3"})
+            doses.add(round(dosev,6))
+        if pending:db().table("jar_test_results").insert(pending).execute()
+
+try:
+    sync_committed_history()
+except Exception as seed_error:
+    st.sidebar.warning(f"Historical baseline sync needs review: {seed_error}")
+
 try:data=load()
 except Exception as exc:
     st.error("Could not load the laboratory database. Check Supabase connection and table columns.");st.exception(exc);st.stop()
@@ -227,6 +266,10 @@ with tabs[3]:
     if verified:
         err=[abs(float(q["actual_turbidity_ntu"])-float(q["predicted_turbidity_ntu"])) for q in verified]
         st.metric("Validated treated-turbidity MAE",f"{np.mean(err):.2f} NTU")
+    dose_outcomes=[q for q in preds if q.get("actual_turbidity_ntu") is not None and q.get("target_turbidity_ntu") is not None and q.get("predicted_dose_mg_l") is not None]
+    if dose_outcomes:
+        achieved=sum(float(q["actual_turbidity_ntu"])<=float(q["target_turbidity_ntu"]) for q in dose_outcomes)
+        st.metric("Saved dose recommendations that achieved target",f"{achieved/len(dose_outcomes)*100:.0f}%",help=f"{achieved} of {len(dose_outcomes)} recommendations with recorded actual outcomes met their saved target.")
 
 with tabs[4]:
     st.subheader("Data quality and model governance")
