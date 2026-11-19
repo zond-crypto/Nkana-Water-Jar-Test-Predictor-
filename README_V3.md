@@ -18,7 +18,7 @@
 - GitHub stores source; Streamlit Community Cloud runs the app.
 
 ## Deploy
-In Streamlit Community Cloud → Manage app → Settings, change Main file path to app_v3.py. Keep existing secrets, reboot, then verify experiment and jar counts. Run tests with pytest -q.
+The existing deployed entry point app.py now forwards to app_v3.py, so no main-file setting change should be necessary. Streamlit Community Cloud should redeploy from the new commit. Keep existing secrets, reboot if needed, then verify experiment and jar counts. Run tests with pytest -q.
 
 ## Data and limits
 No database migration is required. Keep the repository private and never commit credentials. The historical data are sparse for pH, temperature and alkalinity; the first dose model therefore uses raw turbidity only and does not invent missing variables. Improve coverage through routine real measurements. Predictions are decision support only; confirm every candidate with a current jar test and approved NWSC operating procedures.
