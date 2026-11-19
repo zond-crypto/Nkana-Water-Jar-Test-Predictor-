@@ -5,11 +5,11 @@ Streamlit decision-support application for historical jar-test dose-response ana
 ## Run
 ```bash
 pip install -r requirements.txt
-streamlit run app.py
+streamlit run app_v3.py
 ```
 
 ## Deploy
-Use Streamlit Community Cloud, select this private repository, branch `main`, and main file `app.py`.
+Use Streamlit Community Cloud, select this private repository, branch `main`, and main file `app_v3.py`.
 
 ## Import historical data
 In the app sidebar, upload `Nkana_Water_Intelligent_Jar_Test_Workbook.xlsx`. The app reads the `Jar Test Data` sheet and appends numeric dose-response observations. Avoid importing the same workbook repeatedly.
@@ -21,3 +21,7 @@ In the app sidebar, upload `Nkana_Water_Intelligent_Jar_Test_Workbook.xlsx`. The
 - SQLite on Streamlit hosting is not durable storage. Configure a managed persistent database before continuous operational use or multi-user deployment.
 - Do not upload confidential or identifiable operational records to a public repository. Keep this repository private.
 - Confirm every candidate dose with a fresh jar test and approved operational procedures.
+
+
+## Version 3.0
+See [README_V3.md](README_V3.md) for the new model architecture, validation approach, deployment setting and governance controls. The v3 entry point is `app_v3.py`; the previous `app.py` remains available as a rollback reference.
