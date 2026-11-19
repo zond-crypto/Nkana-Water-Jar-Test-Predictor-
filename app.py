@@ -324,12 +324,20 @@ def import_historical_workbook(uploaded):
             exp_id = rec[0]["id"]
             created_experiments += 1
 
-        old_rows = db.table("jar_test_results").select("observation_notes").eq("experiment_id", exp_id).execute().data or []
+        old_rows = db.table("jar_test_results").select("dose_mg_l,observation_notes").eq("experiment_id", exp_id).execute().data or []
         old_markers = {x.get("observation_notes") for x in old_rows}
-        pending = []
+        old_doses = {round(float(x["dose_mg_l"]), 6) for x in old_rows}
+        # Keep one result per dose (database uniqueness rule); prefer a numeric
+        # turbidity reading when the workbook repeats a dose on a summary row.
+        preferred = {}
         for excel_row, dose_v, turb_v, tph_v in records:
+            key = round(float(dose_v), 6)
+            if key not in preferred or (preferred[key][2] is None and turb_v is not None):
+                preferred[key] = (excel_row, dose_v, turb_v, tph_v)
+        pending = []
+        for excel_row, dose_v, turb_v, tph_v in preferred.values():
             marker = f"source_sheet={sheet}; source_excel_row={excel_row}; source_file=JAR TEST EXPERIMENT"
-            if marker in old_markers:
+            if marker in old_markers or round(float(dose_v), 6) in old_doses:
                 continue
             pending.append({
                 "experiment_id": exp_id,
@@ -339,6 +347,7 @@ def import_historical_workbook(uploaded):
                 "result_origin": "imported",
                 "observation_notes": marker
             })
+            old_doses.add(round(float(dose_v), 6))
         if pending:
             db.table("jar_test_results").insert(pending).execute()
             inserted += len(pending)
