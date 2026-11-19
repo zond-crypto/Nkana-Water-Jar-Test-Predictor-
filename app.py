@@ -495,10 +495,17 @@ if not data.empty:
 else: real_data=data
 
 m1,m2,m3,m4=st.columns(4)
-m1.metric("Dose observations",f"{len(data):,}")
-m2.metric("Experiments",int(data.experiment_id.nunique()) if not data.empty else 0)
-m3.metric("Measured/imported results",len(real_data))
-m4.metric("Synthetic records in database",int((data.origin=="synthetic").sum()) if not data.empty else 0)
+# Defensive dashboard counts: tolerate nullable identifiers/origin values from Postgres.
+if data.empty:
+    experiment_count = 0
+    synthetic_count = 0
+else:
+    experiment_count = int(data["experiment_id"].dropna().astype(str).nunique())
+    synthetic_count = int(data["origin"].fillna("").astype(str).eq("synthetic").sum())
+m1.metric("Dose observations", f"{len(data):,}")
+m2.metric("Experiments", f"{experiment_count:,}")
+m3.metric("Measured/imported results", f"{len(real_data):,}")
+m4.metric("Synthetic records in database", f"{synthetic_count:,}")
 
 tabs=st.tabs(["Dose optimiser","Predict treated turbidity","Record jar test","History & validation","Data quality & exports"])
 
