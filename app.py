@@ -67,8 +67,11 @@ def load_data():
         return pd.DataFrame()
     a, b = pd.DataFrame(exps), pd.DataFrame(jars)
     d = b.merge(a, left_on="experiment_id", right_on="id", suffixes=("_jar", "_exp"))
+    # Keep the database UUID separate from the human-readable experiment code.
+    # Renaming both to experiment_id creates duplicate DataFrame columns and
+    # causes nunique()/groupby() dashboard failures.
     d = d.rename(columns={
-        "experiment_code":"experiment_id", "experiment_date":"date",
+        "experiment_id":"experiment_uuid", "experiment_code":"experiment_id", "experiment_date":"date",
         "source_location":"source", "raw_turbidity_ntu":"raw_turbidity",
         "raw_ph":"raw_ph", "raw_temperature_c":"temperature",
         "raw_alkalinity_mg_l_caco3":"alkalinity", "dose_mg_l":"dose",
