@@ -68,7 +68,7 @@ if not st.session_state.get("authenticated", False):
         entered = st.text_input("Application password", type="password", autocomplete="current-password")
         submitted = st.form_submit_button("Sign in", type="primary", use_container_width=True)
     if submitted:
-        if hmac.compare_digest(entered.strip(), password):
+        if hmac.compare_digest(entered.strip().encode("utf-8"), password.encode("utf-8")):
             st.session_state["authenticated"] = True
             st.rerun()
         else:
