@@ -1,0 +1,19 @@
+{
+  "name": "Nkana Water Treatment Intelligence",
+  "short_name": "Nkana Water",
+  "description": "Alum dose optimisation and jar-test decision support for Nkana Water.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0b1420",
+  "theme_color": "#0b1420",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
