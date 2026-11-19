@@ -1,2 +1,2 @@
-"""Compatibility entry point: the deployed Streamlit app now runs v3."""
-import app_v3  # noqa: F401 — importing executes the Streamlit application.
+"""Stable Streamlit entry point for Nkana Water Treatment Intelligence."""
+import app_v4  # noqa: F401 — importing executes the Streamlit application.
