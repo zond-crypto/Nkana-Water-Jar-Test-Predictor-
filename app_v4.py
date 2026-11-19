@@ -124,12 +124,10 @@ tabs=st.tabs(["Dose optimiser","Treated-water predictor","Record experiment","Hi
 with tabs[0]:
     st.subheader("Aluminium sulphate dose optimiser")
     st.caption("One target-dose estimate per independent experiment. No synthetic observations enter the model.")
-    a,b,c=st.columns(3)
+    a,b=st.columns(2)
     raw=a.number_input("Current raw turbidity (NTU)",min_value=.01,value=50.,step=1.)
     target=b.number_input("Target settled turbidity (NTU)",min_value=.1,value=6.,step=.5)
-    years=c.selectbox("Training period",["All tests","2021 onward","2023 onward"])
-    yr={"All tests":2000,"2021 onward":2021,"2023 onward":2023}[years]
-    result,train=optimise_alum_dose(data,raw,target,yr) if not data.empty else ({"blocked":True,"reason":"No historical observations are available."},pd.DataFrame())
+    result,train=optimise_alum_dose(data,raw,target,2000) if not data.empty else ({"blocked":True,"reason":"No historical observations are available."},pd.DataFrame())
     if result.get("blocked"):
         st.warning(result["reason"])
         if not train.empty:
@@ -177,7 +175,7 @@ with tabs[0]:
         fig.add_scatter(x=train.raw,y=train.dose,mode="markers+text",text=train.experiment_id,textposition="top center",name="Experiment target dose")
         fig.update_layout(xaxis_title="Raw turbidity (NTU)",yaxis_title=f"Alum dose to reach ≤ {target:g} NTU (mg/L)",height=390)
         st.plotly_chart(fig,use_container_width=True)
-        st.caption("Each dot represents one independent experiment after monotone dose-response smoothing. Inspect unusual experiments before relying on the model.")
+        st.caption("Each dot represents one independent experiment after monotone dose-response smoothing. The historical source contains date-label inconsistencies, so v4 deliberately uses all eligible experiments rather than filtering by year. Inspect unusual experiments before relying on the model.")
     st.info("pH, alkalinity and temperature are deliberately not used as prediction features yet: their historical coverage is too incomplete for a fair validation. We will add them only when enough comparable, verified measurements have accumulated.")
 
 with tabs[1]:
