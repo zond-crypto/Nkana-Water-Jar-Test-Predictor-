@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from uuid import uuid4
+import hmac
 
 import pandas as pd
 import streamlit as st
@@ -10,7 +11,30 @@ from sklearn.model_selection import KFold, cross_val_predict
 
 st.set_page_config(page_title="Nkana Water | Jar Test Predictor", page_icon="💧", layout="wide")
 st.title("Nkana Water | Jar Test Predictor")
+
 st.caption("Historical jar-test analysis • Alum dose-response • Turbidity decision support")
+
+# Basic shared-password gate: protect the public app while the deployment is being hardened.
+app_password = st.secrets.get("APP_PASSWORD", "")
+if not app_password:
+    st.error("App access is locked. Add APP_PASSWORD in Streamlit Secrets.")
+    st.stop()
+if not st.session_state.get("authenticated", False):
+    with st.form("login"):
+        st.subheader("Laboratory access")
+        entered = st.text_input("Application password", type="password")
+        login = st.form_submit_button("Sign in")
+    if login:
+        if hmac.compare_digest(entered, app_password):
+            st.session_state["authenticated"] = True
+            st.rerun()
+        else:
+            st.error("Incorrect password.")
+    st.stop()
+with st.sidebar:
+    if st.button("Sign out"):
+        st.session_state["authenticated"] = False
+        st.rerun()
 
 REQUIRED = ["Raw Turbidity (NTU)", "Raw pH", "Alum Dose (mg/L)", "Treated Turbidity (NTU)"]
 
