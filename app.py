@@ -16,4 +16,5 @@ except Exception as exc:
     st.code(f"{type(exc).__name__}: {exc}")
     with st.expander("Technical traceback"):
         st.code(traceback.format_exc())
-    st.info("If this is a deployment/import issue, check the Streamlit Cloud app settings: repository, branch main, main file app.py, and installed requirements.")
+    st.info("If this is a deployment/import issue, check Streamlit Cloud → Manage app → Logs, and confirm repository zond-crypto/Nkana-Water-Jar-Test-Predictor-, branch main, main file app.py.")
+    st.stop()
