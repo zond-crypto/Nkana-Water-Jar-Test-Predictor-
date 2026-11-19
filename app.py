@@ -449,6 +449,17 @@ with st.sidebar:
         except Exception as exc:
             st.error(f"Import failed: {exc}")
 
+# First-deployment bootstrap: populate an empty database from the version-controlled historical dataset.
+# This is idempotent because each imported row is keyed by its original worksheet + Excel row marker.
+if ready:
+    try:
+        any_experiments = get_db().table("experiments").select("id").limit(1).execute().data or []
+        if not any_experiments:
+            seeded_rows, seeded_experiments = import_bundled_historical_dataset()
+            st.sidebar.success(f"Initial historical import complete: {seeded_experiments} experiments, {seeded_rows} jar rows.")
+    except Exception as seed_exc:
+        st.sidebar.error(f"Automatic historical import did not complete: {seed_exc}")
+
 try:
     data=load_data() if ready else pd.DataFrame()
     load_error=None
