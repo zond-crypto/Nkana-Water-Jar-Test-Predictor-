@@ -491,7 +491,22 @@ with tabs[3]:
     st.subheader("Prediction history")
     try:
         preds=get_db().table("predictions").select("*").order("created_at",desc=True).limit(250).execute().data or []
-        if preds: st.dataframe(pd.DataFrame(preds),use_container_width=True,hide_index=True)
+        if preds:
+            st.dataframe(pd.DataFrame(preds),use_container_width=True,hide_index=True)
+            st.markdown("**Record the actual result for a saved prediction**")
+            outstanding=[p for p in preds if p.get("actual_turbidity_ntu") is None]
+            if outstanding:
+                labels={f"{p['id']} | {p.get('created_at','')[:16]} | dose {p.get('dose_mg_l','n/a')} mg/L":p["id"] for p in outstanding}
+                with st.form("prediction_outcome"):
+                    selected=st.selectbox("Prediction record",list(labels.keys()))
+                    actual=st.number_input("Measured settled turbidity (NTU)",min_value=0.0,value=5.0,step=0.1)
+                    outcome=st.form_submit_button("Save measured outcome")
+                if outcome:
+                    get_db().table("predictions").update({"actual_turbidity_ntu":actual}).eq("id",labels[selected]).execute()
+                    st.success("Actual result saved. It will be available for prediction-performance review.")
+                    st.rerun()
+            else:
+                st.caption("All displayed predictions already have measured outcomes, or no predictions are awaiting validation.")
         else: st.caption("No saved predictions yet.")
     except Exception as exc: st.error(f"Could not load prediction history: {exc}")
 
