@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b1420"><meta name="description" content="Nkana Water Treatment Intelligence — alum dose optimisation and jar-test decision support.">
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="Nkana Water">
+<link rel="manifest" href="./manifest.webmanifest"><link rel="icon" href="./icon.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="./icon.svg">
+<title>Nkana Water Treatment Intelligence</title>
+<style>
+:root{color-scheme:dark}*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;background:#0b1420;color:#e7eef7;font-family:system-ui,-apple-system,Segoe UI,sans-serif}
+body{display:flex;flex-direction:column}.top{display:flex;align-items:center;gap:12px;padding:10px 14px;padding-top:max(10px,env(safe-area-inset-top));background:#101f31;border-bottom:1px solid #34465b;min-height:58px}
+.logo{width:34px;height:34px}.brand{font-weight:750;font-size:14px;line-height:1.2}.sub{font-size:11px;color:#b5c3d2;margin-top:3px}
+#install{margin-left:auto;border:1px solid #38c6c0;background:#087f83;color:white;border-radius:9px;padding:9px 12px;font-weight:700;display:none}
+main{flex:1;min-height:0;position:relative}iframe{border:0;width:100%;height:100%;background:#0b1420}
+#hint{display:none;padding:8px 14px;background:#172638;color:#dce9f5;font-size:12px;text-align:center}
+</style>
+</head>
+<body>
+<header class="top"><img class="logo" src="./icon.svg" alt=""><div><div class="brand">NKANA WATER</div><div class="sub">Treatment Intelligence · Alum Optimisation</div></div><button id="install">Install app</button></header>
+<div id="hint">For iPhone: tap Share, then choose “Add to Home Screen”.</div>
+<main><iframe title="Nkana Water Treatment Intelligence" src="https://5yfkfs8p4w6ia9646k5jzm.streamlit.app/?embed=true" allow="clipboard-read; clipboard-write"></iframe></main>
+<script>
+if("serviceWorker" in navigator){window.addEventListener("load",()=>navigator.serviceWorker.register("./sw.js").catch(()=>{}));}
+let installEvent;const btn=document.getElementById("install");const hint=document.getElementById("hint");
+window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();installEvent=e;btn.style.display="block";});
+btn.addEventListener("click",async()=>{if(!installEvent)return;installEvent.prompt();await installEvent.userChoice;installEvent=null;btn.style.display="none";});
+window.addEventListener("appinstalled",()=>{btn.style.display="none";});
+const ios=/iphone|ipad|ipod/i.test(navigator.userAgent)&&!window.navigator.standalone;
+if(ios)hint.style.display="block";
+</script>
+</body></html>
