@@ -5,11 +5,11 @@ Streamlit decision-support application for historical jar-test dose-response ana
 ## Run
 ```bash
 pip install -r requirements.txt
-streamlit run app_v3.py
+streamlit run app.py
 ```
 
 ## Deploy
-Use Streamlit Community Cloud, select this private repository, branch `main`, and main file `app_v3.py`.
+Use Streamlit Community Cloud, select this private repository, branch `main`, and main file `app.py`.
 
 ## Import historical data
 In the app sidebar, upload `Nkana_Water_Intelligent_Jar_Test_Workbook.xlsx`. The app reads the `Jar Test Data` sheet and appends numeric dose-response observations. Avoid importing the same workbook repeatedly.
