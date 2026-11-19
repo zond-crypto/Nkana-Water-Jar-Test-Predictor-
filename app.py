@@ -15,9 +15,56 @@ from sklearn.ensemble import ExtraTreesRegressor
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 from sklearn.model_selection import GroupKFold, cross_val_predict
 
-st.set_page_config(page_title="Nkana Water | Jar Test Intelligence", page_icon="💧", layout="wide")
-st.title("Nkana Water | Jar Test Intelligence")
-st.caption("Historical jar-test learning • Alum dose optimisation • Dose-response simulation • Plant chemical planning")
+st.set_page_config(
+    page_title="Nkana Water | Jar Test Intelligence",
+    page_icon="💧",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# NWSC visual system: clean laboratory dashboard, high contrast and mobile-friendly.
+st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap');
+:root { --nwsc-ink:#142b3b; --nwsc-muted:#617585; --nwsc-teal:#087f8c; --nwsc-teal-dark:#075c68; --nwsc-blue:#173f5f; --nwsc-line:#dce6eb; }
+html, body, [class*="css"] { font-family:'DM Sans',sans-serif; }
+.stApp { background:#f5f8fa; color:var(--nwsc-ink); }
+[data-testid="stHeader"] { background:rgba(245,248,250,.92); }
+.block-container { max-width:1440px; padding-top:1.25rem; padding-bottom:3rem; }
+h1,h2,h3 { font-family:'Manrope',sans-serif; letter-spacing:-.025em; color:var(--nwsc-ink); }
+[data-testid="stSidebar"] { background:linear-gradient(180deg,#102f43 0%,#123d52 100%); }
+[data-testid="stSidebar"] * { color:#edf7fa !important; }
+[data-testid="stSidebar"] [data-testid="stCaptionContainer"] { color:#b8d1da !important; }
+[data-testid="stSidebar"] hr { border-color:rgba(255,255,255,.18); }
+[data-testid="stMetric"] { background:#fff; border:1px solid var(--nwsc-line); padding:1rem 1.1rem; border-radius:14px; box-shadow:0 4px 16px rgba(20,43,59,.045); }
+[data-testid="stMetricLabel"] { color:var(--nwsc-muted); font-weight:600; }
+[data-testid="stMetricValue"] { color:var(--nwsc-blue); font-family:'Manrope',sans-serif; font-weight:800; }
+.stTabs [data-baseweb="tab-list"] { gap:.35rem; border-bottom:1px solid var(--nwsc-line); }
+.stTabs [data-baseweb="tab"] { height:3.1rem; padding:0 1rem; border-radius:10px 10px 0 0; color:#526a79; font-weight:600; }
+.stTabs [aria-selected="true"] { color:var(--nwsc-teal) !important; border-bottom:3px solid var(--nwsc-teal); }
+.stButton>button,.stDownloadButton>button { border-radius:10px; min-height:2.65rem; font-weight:700; border:1px solid var(--nwsc-teal); }
+.stButton>button[kind="primary"],.stFormSubmitButton>button { background:var(--nwsc-teal); color:#fff; }
+.stButton>button:hover,.stDownloadButton>button:hover { border-color:var(--nwsc-teal-dark); color:var(--nwsc-teal-dark); }
+input,textarea,[data-baseweb="select"]>div { border-radius:9px !important; }
+[data-testid="stDataFrame"],[data-testid="stTable"] { border:1px solid var(--nwsc-line); border-radius:12px; overflow:hidden; }
+[data-testid="stAlert"],[data-testid="stForm"] { border-radius:12px; }
+[data-testid="stForm"] { background:#fff; border:1px solid var(--nwsc-line); padding:1rem; }
+.nwsc-hero { position:relative; overflow:hidden; margin:.15rem 0 1.3rem; padding:1.5rem 1.7rem; border-radius:18px; color:#fff; background:linear-gradient(115deg,#102f43 0%,#14536a 58%,#087f8c 100%); box-shadow:0 12px 28px rgba(16,47,67,.13); }
+.nwsc-hero:after { content:' '; position:absolute; width:230px; height:230px; border:1px solid rgba(255,255,255,.13); border-radius:50%; right:-50px; top:-115px; box-shadow:0 0 0 28px rgba(255,255,255,.035),0 0 0 58px rgba(255,255,255,.025); }
+.nwsc-kicker { color:#b9e7e9; text-transform:uppercase; letter-spacing:.13em; font-size:.72rem; font-weight:700; }
+.nwsc-title { color:#fff; font:800 clamp(1.55rem,3vw,2.35rem)/1.15 'Manrope',sans-serif; margin:.35rem 0 .55rem; }
+.nwsc-subtitle { color:#d6e9ed; font-size:.94rem; max-width:780px; margin:0; }
+.nwsc-pills { display:flex; flex-wrap:wrap; gap:.5rem; margin-top:1rem; }
+.nwsc-pill { padding:.32rem .65rem; border:1px solid rgba(255,255,255,.23); background:rgba(255,255,255,.09); border-radius:999px; color:#f1fbfc; font-size:.75rem; }
+@media(max-width:700px) { .block-container{padding-left:.85rem;padding-right:.85rem;} .nwsc-hero{padding:1.2rem;border-radius:14px;} .stTabs [data-baseweb="tab"]{padding:0 .55rem;font-size:.78rem;} [data-testid="stMetric"]{padding:.75rem;} [data-testid="stMetricValue"]{font-size:1.45rem;} }
+</style>
+<div class="nwsc-hero">
+  <div class="nwsc-kicker">Nkana Water Supply and Sanitation Company · Central Laboratory</div>
+  <div class="nwsc-title">Jar Test Intelligence</div>
+  <p class="nwsc-subtitle">A laboratory decision-support workspace for historical jar-test learning, aluminium sulphate optimisation, treated-water prediction and chemical planning.</p>
+  <div class="nwsc-pills"><span class="nwsc-pill">Historical data learning</span><span class="nwsc-pill">Dose optimisation</span><span class="nwsc-pill">Trend simulation</span><span class="nwsc-pill">Supabase storage</span></div>
+</div>
+""", unsafe_allow_html=True)
 
 # Shared-password gate. Keep APP_PASSWORD and SUPABASE_SERVICE_ROLE_KEY in Streamlit Secrets only.
 app_password = st.secrets.get("APP_PASSWORD", "")
@@ -444,6 +491,8 @@ def make_synthetic(curves, count, seed=17):
     return pd.DataFrame(out)
 
 ready=db_status()
+st.sidebar.markdown("## 💧 Nkana Water")
+st.sidebar.caption("CENTRAL LABORATORY · DIGITAL TOOLS")
 st.sidebar.markdown("**Storage:** Supabase PostgreSQL")
 if ready: st.sidebar.success("Database connection configured")
 st.sidebar.caption("Only real/imported measurements train the dose model. Synthetic records are never stored as measured results.")
@@ -510,7 +559,7 @@ m2.metric("Experiments", f"{experiment_count:,}")
 m3.metric("Measured/imported results", f"{len(real_data):,}")
 m4.metric("Synthetic records in database", f"{synthetic_count:,}")
 
-tabs=st.tabs(["Dose optimiser","Predict treated turbidity","Record jar test","History & validation","Data quality & exports"])
+tabs=st.tabs(["⚗ Dose optimiser","◉ Treated-water prediction","＋ Record jar test","▤ History & validation","✓ Data quality & exports"])
 
 with tabs[0]:
     st.subheader("Aluminium sulphate dose optimiser")
