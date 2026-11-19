@@ -449,16 +449,21 @@ with st.sidebar:
         except Exception as exc:
             st.error(f"Import failed: {exc}")
 
-# First-deployment bootstrap: populate an empty database from the version-controlled historical dataset.
-# This is idempotent because each imported row is keyed by its original worksheet + Excel row marker.
+# Historical bootstrap/reconciliation: run on every app start, not only when the
+# experiments table is completely empty. This repairs partial first imports safely.
+# Each jar row is de-duplicated by its original worksheet + Excel row marker.
 if ready:
     try:
-        any_experiments = get_db().table("experiments").select("id").limit(1).execute().data or []
-        if not any_experiments:
-            seeded_rows, seeded_experiments = import_bundled_historical_dataset()
-            st.sidebar.success(f"Initial historical import complete: {seeded_experiments} experiments, {seeded_rows} jar rows.")
+        seeded_rows, seeded_experiments = import_bundled_historical_dataset()
+        if seeded_rows or seeded_experiments:
+            st.sidebar.success(
+                f"Historical data synchronised: {seeded_experiments} new experiments, "
+                f"{seeded_rows} new jar rows."
+            )
+        else:
+            st.sidebar.caption("Committed historical baseline is already synchronised.")
     except Exception as seed_exc:
-        st.sidebar.error(f"Automatic historical import did not complete: {seed_exc}")
+        st.sidebar.error(f"Historical data synchronisation failed: {seed_exc}")
 
 try:
     data=load_data() if ready else pd.DataFrame()
