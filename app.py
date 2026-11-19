@@ -215,102 +215,138 @@ def hill_curve(raw,dose,floor,d50,h):
     return floor+(raw-floor)/(1+(dose/d50)**h)
 
 def import_historical_workbook(uploaded):
+    """
+    Import the original NWSC multi-sheet workbook OR a normalized flat workbook.
+    Original workbook layout is read by cell position to preserve its actual values:
+      C2 = experiment date; B5 = raw turbidity; B6 = raw pH;
+      rows 11 onward: A = dose, B = treated turbidity, C = treated pH.
+    Missing '*' results are stored as NULL, never converted to zero.
+    """
     book = pd.ExcelFile(uploaded)
-    candidates = []
-    required = {
-        "raw": ["Raw Turbidity (NTU)", "Raw Turbidity", "Raw NTU"],
-        "dose": ["Alum Dose (mg/L)", "Alum Dose", "Dose (mg/L)", "Dose"],
-        "treated": ["Treated Turbidity (NTU)", "Treated Turbidity", "Settled Turbidity (NTU)"]
-    }
-    for sheet in book.sheet_names:
-        try:
-            frame = pd.read_excel(uploaded, sheet_name=sheet)
-        except Exception:
-            continue
-        # Also support the workbook's normalized Jar Test Data sheet, whose headers may start below title rows.
-        for header_row in [0, 1, 2, 3, 4, 5]:
-            try:
-                trial = pd.read_excel(uploaded, sheet_name=sheet, header=header_row)
-            except Exception:
-                continue
-            norm = {str(c).strip().lower(): c for c in trial.columns}
-            def find(options):
-                for option in options:
-                    if option.lower() in norm:
-                        return norm[option.lower()]
-                return None
-            raw_col, dose_col, treated_col = find(required["raw"]), find(required["dose"]), find(required["treated"])
-            if raw_col and dose_col and treated_col:
-                candidates.append((sheet, trial, raw_col, dose_col, treated_col))
-                break
-    if not candidates:
-        raise ValueError("Could not identify columns for raw turbidity, alum dose and treated/settled turbidity. Use the normalized Jar Test Data sheet or the original workbook format.")
-    db=get_db()
-    inserted=0
-    for sheet, frame, raw_col, dose_col, treated_col in candidates:
-        norm={str(c).strip().lower():c for c in frame.columns}
-        def col(*names):
-            for n in names:
-                if n.lower() in norm: return norm[n.lower()]
+    db = get_db()
+    inserted = 0
+    created_experiments = 0
+    skipped_sheets = []
+
+    def num(value):
+        if value is None or (isinstance(value, str) and value.strip() in {"", "*", "-", "—", "N/A", "NA"}):
             return None
-        id_col=col("Experiment ID","Experiment","Test ID")
-        date_col=col("Date","Experiment Date","Test Date")
-        ph_col=col("Raw pH","Raw-water pH","Raw Water pH")
-        tph_col=col("Treated pH","Settled pH")
-        source_col=col("Source Sheet","Source","Location","Source / Location")
-        valid=frame.dropna(subset=[raw_col,dose_col,treated_col]).copy()
-        if valid.empty: continue
-        if id_col:
-            valid["_exp_code"]=valid[id_col].astype(str).str.strip()
-        else:
-            valid["_exp_code"]=sheet
-        for code, group in valid.groupby("_exp_code"):
-            if not code or code.lower()=="nan": code=sheet
-            raw_vals=pd.to_numeric(group[raw_col],errors="coerce").dropna()
-            if raw_vals.empty: continue
-            raw=float(raw_vals.iloc[0])
-            ph=None
-            if ph_col:
-                p=pd.to_numeric(group[ph_col],errors="coerce").dropna()
-                if not p.empty: ph=float(p.iloc[0])
-            date_value=None
-            if date_col:
-                dates=pd.to_datetime(group[date_col],errors="coerce").dropna()
-                if not dates.empty: date_value=dates.iloc[0].date().isoformat()
-            if not date_value: date_value=datetime.now(timezone.utc).date().isoformat()
-            source=str(group[source_col].iloc[0]) if source_col else sheet
-            existing=db.table("experiments").select("id").eq("experiment_code",str(code)).limit(1).execute().data or []
-            if existing:
-                exp_id=existing[0]["id"]
+        try:
+            result = float(str(value).replace(",", "").strip())
+            return result if np.isfinite(result) else None
+        except Exception:
+            return None
+
+    for sheet in book.sheet_names:
+        frame = pd.read_excel(uploaded, sheet_name=sheet, header=None, dtype=object)
+        if frame.empty or len(frame.index) < 6:
+            continue
+
+        # The source workbook has no flat header row. Read its fixed worksheet layout.
+        raw = num(frame.iat[4, 1]) if frame.shape[0] > 4 and frame.shape[1] > 1 else None
+        raw_ph = num(frame.iat[5, 1]) if frame.shape[0] > 5 and frame.shape[1] > 1 else None
+        date_raw = frame.iat[1, 2] if frame.shape[0] > 1 and frame.shape[1] > 2 else None
+
+        # Also accept a normalized sheet with explicit column names.
+        if raw is None:
+            for header_row in range(min(6, len(frame.index))):
+                headers = [str(v).strip().lower() if v is not None else "" for v in frame.iloc[header_row].tolist()]
+                lookup = {name: i for i, name in enumerate(headers)}
+                def locate(*names):
+                    for name in names:
+                        if name.lower() in lookup:
+                            return lookup[name.lower()]
+                    return None
+                raw_i = locate("raw turbidity (ntu)", "raw turbidity", "raw ntu")
+                dose_i = locate("alum dose (mg/l)", "alum dose", "dose (mg/l)", "dose")
+                turb_i = locate("treated turbidity (ntu)", "treated turbidity", "settled turbidity (ntu)")
+                if raw_i is not None and dose_i is not None and turb_i is not None:
+                    records = []
+                    ph_i = locate("raw ph", "raw-water ph", "raw water ph")
+                    tph_i = locate("treated ph", "settled ph")
+                    date_i = locate("date", "experiment date", "test date")
+                    for row_i in range(header_row + 1, len(frame.index)):
+                        row = frame.iloc[row_i]
+                        dose_v = num(row.iloc[dose_i]) if dose_i < len(row) else None
+                        turb_v = num(row.iloc[turb_i]) if turb_i < len(row) else None
+                        if dose_v is None:
+                            continue
+                        records.append((row_i + 1, dose_v, turb_v,
+                                        num(row.iloc[tph_i]) if tph_i is not None and tph_i < len(row) else None))
+                    raw = num(frame.iloc[header_row + 1, raw_i]) if header_row + 1 < len(frame.index) else None
+                    raw_ph = num(frame.iloc[header_row + 1, ph_i]) if ph_i is not None and header_row + 1 < len(frame.index) else None
+                    if date_i is not None and header_row + 1 < len(frame.index):
+                        date_raw = frame.iloc[header_row + 1, date_i]
+                    break
             else:
-                rec=db.table("experiments").insert({
-                    "experiment_code":str(code),"experiment_date":date_value,
-                    "source_location":source,"water_source":source,
-                    "raw_turbidity_ntu":raw,"raw_ph":ph,
-                    "coagulant_name":"Aluminium sulphate"
-                }).execute().data
-                exp_id=rec[0]["id"]
-            old=db.table("jar_test_results").select("dose_mg_l").eq("experiment_id",exp_id).execute().data or []
-            old_doses={round(float(x["dose_mg_l"]),6) for x in old}
-            rows=[]
-            for _,row in group.iterrows():
-                dose_value=pd.to_numeric(pd.Series([row[dose_col]]),errors="coerce").iloc[0]
-                turb_value=pd.to_numeric(pd.Series([row[treated_col]]),errors="coerce").iloc[0]
-                if pd.isna(dose_value) or pd.isna(turb_value): continue
-                dose_value=float(dose_value)
-                if round(dose_value,6) in old_doses: continue
-                treated_ph=None
-                if tph_col:
-                    v=pd.to_numeric(pd.Series([row[tph_col]]),errors="coerce").iloc[0]
-                    if not pd.isna(v): treated_ph=float(v)
-                rows.append({"experiment_id":exp_id,"dose_mg_l":dose_value,
-                             "treated_turbidity_ntu":float(turb_value),
-                             "treated_ph":treated_ph,"result_origin":"imported"})
-                old_doses.add(round(dose_value,6))
-            if rows:
-                db.table("jar_test_results").insert(rows).execute()
-                inserted += len(rows)
-    return inserted
+                skipped_sheets.append(sheet)
+                continue
+        else:
+            records = []
+            for row_i in range(10, len(frame.index)):
+                row = frame.iloc[row_i]
+                dose_v = num(row.iloc[0]) if len(row) > 0 else None
+                if dose_v is None:
+                    continue
+                turb_v = num(row.iloc[1]) if len(row) > 1 else None
+                tph_v = num(row.iloc[2]) if len(row) > 2 else None
+                records.append((row_i + 1, dose_v, turb_v, tph_v))
+
+        if raw is None or raw <= 0 or not records:
+            skipped_sheets.append(sheet)
+            continue
+
+        if isinstance(date_raw, (datetime, )):
+            date_value = date_raw.date().isoformat()
+        elif date_raw is not None and str(date_raw).strip():
+            parsed_date = pd.to_datetime(date_raw, dayfirst=True, errors="coerce")
+            date_value = parsed_date.date().isoformat() if not pd.isna(parsed_date) else datetime.now(timezone.utc).date().isoformat()
+        else:
+            date_value = datetime.now(timezone.utc).date().isoformat()
+
+        code = str(sheet).strip()
+        existing = db.table("experiments").select("id").eq("experiment_code", code).limit(1).execute().data or []
+        if existing:
+            exp_id = existing[0]["id"]
+        else:
+            notes = (f"Imported from uploaded original jar-test workbook. Worksheet name: {sheet}. "
+                     f"Date cell as recorded: {date_raw!s}. Date was not inferred from worksheet title.")
+            rec = db.table("experiments").insert({
+                "experiment_code": code,
+                "experiment_date": date_value,
+                "source_location": "Historical NWSC jar-test workbook",
+                "water_source": "Raw water",
+                "raw_turbidity_ntu": raw,
+                "raw_ph": raw_ph,
+                "coagulant_name": "Aluminium sulphate",
+                "notes": notes
+            }).execute().data
+            exp_id = rec[0]["id"]
+            created_experiments += 1
+
+        old_rows = db.table("jar_test_results").select("observation_notes").eq("experiment_id", exp_id).execute().data or []
+        old_markers = {x.get("observation_notes") for x in old_rows}
+        pending = []
+        for excel_row, dose_v, turb_v, tph_v in records:
+            marker = f"source_sheet={sheet}; source_excel_row={excel_row}; source_file=JAR TEST EXPERIMENT"
+            if marker in old_markers:
+                continue
+            pending.append({
+                "experiment_id": exp_id,
+                "dose_mg_l": dose_v,
+                "treated_turbidity_ntu": turb_v,
+                "treated_ph": tph_v,
+                "result_origin": "imported",
+                "observation_notes": marker
+            })
+        if pending:
+            db.table("jar_test_results").insert(pending).execute()
+            inserted += len(pending)
+
+    if skipped_sheets:
+        st.warning("Skipped sheets without a recognizable experiment layout: " + ", ".join(skipped_sheets))
+    return inserted, created_experiments
+
 
 def make_synthetic(curves, count, seed=17):
     rng=np.random.default_rng(seed)
@@ -337,8 +373,8 @@ with st.sidebar:
     workbook=st.file_uploader("Upload original NWSC workbook (.xlsx)",type=["xlsx"],key="history_import")
     if workbook and st.button("Import to permanent database",disabled=not ready,type="primary"):
         try:
-            n=import_historical_workbook(workbook)
-            st.success(f"Imported {n} new dose observations. Existing experiment/dose pairs were skipped.")
+            n, created = import_historical_workbook(workbook)
+            st.success(f"Imported {n} jar rows across {created} new experiments. Existing source-row records were skipped on repeat imports.")
             st.rerun()
         except Exception as exc:
             st.error(f"Import failed: {exc}")
