@@ -65,7 +65,7 @@ if not password:
 if not st.session_state.get("authenticated", False):
     st.subheader("Laboratory access")
     with st.form("login", clear_on_submit=True):
-        entered = st.text_input("Application password", type="password", autocomplete="current-password")
+        entered = st.text_input("Application password", type="password")
         submitted = st.form_submit_button("Sign in", type="primary", use_container_width=True)
     if submitted:
         if hmac.compare_digest(entered.strip().encode("utf-8"), password.encode("utf-8")):
