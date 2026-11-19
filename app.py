@@ -168,6 +168,21 @@ def predict_dose(model, raw):
     margin=2.0*se
     return (math.exp(mean), math.exp(mean-margin), math.exp(mean+margin))
 
+def bootstrap_required_doses(train, raw, n=1000, seed=42):
+    rng=np.random.default_rng(seed)
+    values=[]
+    if len(train)<5: return np.array(values)
+    for _ in range(n):
+        sample=train.iloc[rng.integers(0,len(train),len(train))].reset_index(drop=True)
+        m=fit_powerlaw(sample)
+        if m is None: continue
+        try:
+            value=predict_dose(m,raw)[0]
+            if np.isfinite(value) and value>0: values.append(value)
+        except Exception:
+            continue
+    return np.asarray(values,dtype=float)
+
 def loo_dose(train):
     if len(train)<6: return None
     errors=[]
@@ -366,12 +381,25 @@ with tabs[0]:
         st.caption("Do not extrapolate this model for operational dosing. Run a jar test.")
     else:
         central,low,high=predict_dose(model,raw)
+        bootstrap=bootstrap_required_doses(train,raw,1000,42)
+        if len(bootstrap)>=100:
+            central=float(np.median(bootstrap))
+            q80=float(np.quantile(bootstrap,0.80))
+            q90=float(np.quantile(bootstrap,0.90))
+        else:
+            q80,q90=high,high
         loo=loo_dose(train)
         confidence="Low"
         if model["n"]>=15 and loo is not None and loo<=0.20: confidence="Higher (historical validation only)"
         elif model["n"]>=8 and loo is not None and loo<=0.35: confidence="Moderate"
         st.markdown(f'<div style="font-size:38px;font-weight:700">{central:.1f} mg/L</div>',unsafe_allow_html=True)
-        st.caption(f"Estimated dose to reach ≤ {target:g} NTU. Approximate 95% prediction interval: {low:.1f}–{high:.1f} mg/L. Confidence: {confidence}.")
+        st.caption(f"Estimated dose to reach ≤ {target:g} NTU. Approximate regression 95% prediction interval: {low:.1f}–{high:.1f} mg/L. Confidence: {confidence}.")
+        if len(bootstrap)>=100:
+            st.markdown(f"**Bootstrap dose scenarios:** median {central:.1f} mg/L · 80th percentile {q80:.1f} mg/L · 90th percentile {q90:.1f} mg/L")
+            candidate=st.number_input("Test a candidate dose (mg/L) — estimated chance of reaching target",min_value=0.0,value=float(round(central,1)),step=0.5,key="candidate_dose")
+            chance=float(np.mean(bootstrap<=candidate)*100)
+            st.metric("Historical-model chance at candidate dose",f"{chance:.0f}%")
+            st.caption("Bootstrap resamples whole experiments, not individual jars. This is an empirical model probability, not a guarantee for today's water.")
         st.warning("This is a starting-dose estimate only. Confirm with a fresh jar test before changing plant dosing.")
         f1,f2,f3=st.columns(3)
         f1.metric("Experiments used",model["n"])
